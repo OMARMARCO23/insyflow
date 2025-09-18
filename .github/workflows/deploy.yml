@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main ]   # change if your default branch is not 'main'
   workflow_dispatch:
 
 permissions:
@@ -25,10 +25,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          # Note: no cache here to avoid lockfile requirement
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund
 
       # Optional: if you’re using client-side AI on GH Pages, expose your key at build time
       # - name: Set env (optional)
