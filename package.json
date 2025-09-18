@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.11.0",
+    "@google-analytics/data": "^4.4.0",
+    "googleapis": "^126.0.1",
     "@tanstack/react-virtual": "^3.0.0",
     "clsx": "^2.1.1",
     "react": "^18.3.1",
