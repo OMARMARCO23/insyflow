@@ -1,11 +1,11 @@
-import { GoogleGenerativeAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const USE_SERVER = String(import.meta.env.VITE_USE_SERVER_AI || 'false') === 'true';
 const CLIENT_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
 
-function ensureClient(): GoogleGenerativeAI {
+function ensureClient() {
   if (!CLIENT_KEY) throw new Error('Missing VITE_GEMINI_API_KEY');
-  return new GoogleGenerativeAI({ apiKey: CLIENT_KEY });
+  return new GoogleGenerativeAI(CLIENT_KEY);
 }
 
 export async function askAiClientSide(params: {
