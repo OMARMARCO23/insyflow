@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DateRangeSelector } from '@/components/DateRangeSelector';
 import { KpiCard } from '@/components/KpiCard';
 import { ChartCard } from '@/components/ChartCard';
@@ -6,9 +6,39 @@ import { SeoAiInsights } from '@/components/SeoAiInsights';
 import { useI18n } from '@/context/I18nContext';
 import { SEO_KPIS, SEARCH_PERFORMANCE, TOP_QUERIES, TOP_SEO_PAGES } from '@/constants';
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from 'recharts';
+import { fetchSeo, type Range } from '@/lib/data';
 
 export const SeoInsights: React.FC = () => {
   const { t } = useI18n();
+  const [range, setRange] = useState<Range>('30d');
+
+  const [seoKpis, setSeoKpis] = useState(SEO_KPIS);
+  const [performance, setPerformance] = useState(SEARCH_PERFORMANCE);
+  const [queries, setQueries] = useState(TOP_QUERIES);
+  const [pages, setPages] = useState(TOP_SEO_PAGES);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const data = await fetchSeo(range);
+        if (!cancelled) {
+          setSeoKpis(data.seoKpis);
+          setPerformance(data.performance);
+          setQueries(data.topQueries);
+          setPages(data.topPages);
+        }
+      } catch {
+        // keep mock data on failure
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [range]);
+
   const [qSort, setQSort] = useState<'query' | 'clicks' | 'impressions' | 'ctr' | 'position'>('clicks');
   const [qDir, setQDir] = useState<'asc' | 'desc'>('desc');
 
@@ -16,60 +46,51 @@ export const SeoInsights: React.FC = () => {
   const [pDir, setPDir] = useState<'asc' | 'desc'>('desc');
 
   const sortedQueries = useMemo(() => {
-    const arr = [...TOP_QUERIES];
+    const arr = [...queries];
     const dir = qDir === 'asc' ? 1 : -1;
     arr.sort((a, b) => {
       switch (qSort) {
-        case 'query':
-          return a.query.localeCompare(b.query) * dir;
-        case 'clicks':
-          return (a.clicks - b.clicks) * dir;
-        case 'impressions':
-          return (a.impressions - b.impressions) * dir;
-        case 'ctr':
-          return (a.ctr - b.ctr) * dir;
-        case 'position':
-          return (a.position - b.position) * dir;
+        case 'query': return a.query.localeCompare(b.query) * dir;
+        case 'clicks': return (a.clicks - b.clicks) * dir;
+        case 'impressions': return (a.impressions - b.impressions) * dir;
+        case 'ctr': return (a.ctr - b.ctr) * dir;
+        case 'position': return (a.position - b.position) * dir;
       }
     });
     return arr;
-  }, [qSort, qDir]);
+  }, [queries, qSort, qDir]);
 
   const sortedPages = useMemo(() => {
-    const arr = [...TOP_SEO_PAGES];
+    const arr = [...pages];
     const dir = pDir === 'asc' ? 1 : -1;
     arr.sort((a, b) => {
       switch (pSort) {
-        case 'path':
-          return a.path.localeCompare(b.path) * dir;
-        case 'clicks':
-          return (a.clicks - b.clicks) * dir;
-        case 'impressions':
-          return (a.impressions - b.impressions) * dir;
-        case 'ctr':
-          return (a.ctr - b.ctr) * dir;
-        case 'position':
-          return (a.position - b.position) * dir;
+        case 'path': return a.path.localeCompare(b.path) * dir;
+        case 'clicks': return (a.clicks - b.clicks) * dir;
+        case 'impressions': return (a.impressions - b.impressions) * dir;
+        case 'ctr': return (a.ctr - b.ctr) * dir;
+        case 'position': return (a.position - b.position) * dir;
       }
     });
     return arr;
-  }, [pSort, pDir]);
+  }, [pages, pSort, pDir]);
 
   const seoDataForAi = {
-    kpis: SEO_KPIS,
-    performance: SEARCH_PERFORMANCE,
-    topQueries: TOP_QUERIES,
-    topPages: TOP_SEO_PAGES,
+    kpis: seoKpis,
+    performance,
+    topQueries: queries,
+    topPages: pages,
   };
 
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
-        <DateRangeSelector />
+        <DateRangeSelector onChange={(r) => setRange(r as Range)} />
+        {loading && <span className="text-xs text-gray-500">Loading…</span>}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {SEO_KPIS.map(k => (
+        {seoKpis.map(k => (
           <KpiCard
             key={k.key}
             title={t(k.labelKey)}
@@ -86,7 +107,7 @@ export const SeoInsights: React.FC = () => {
       <div className="grid gap-4 lg:grid-cols-3">
         <ChartCard title={t('charts.searchPerformance')}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={SEARCH_PERFORMANCE}>
+            <LineChart data={performance}>
               <XAxis dataKey="date" hide />
               <YAxis yAxisId="left" />
               <YAxis yAxisId="right" orientation="right" />
