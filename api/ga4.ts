@@ -26,12 +26,12 @@ export default async function handler(req: any, res: any) {
     });
 
     const range = (req.query.range as Range) || '30d';
-    const { startDate, endDate, prevStartDate, prevEndDate } = buildPeriods(range);
+    const { start, end, prevStart, prevEnd } = buildPeriods(range);
 
     // 1) Totals current and previous (for change %)
     const [totCur] = await analytics.runReport({
       property: `properties/${propertyId}`,
-      dateRanges: [{ startDate, endDate }],
+      dateRanges: [{ startDate: start, endDate: end }],
       metrics: [
         { name: 'totalUsers' },
         { name: 'sessions' },
@@ -42,7 +42,7 @@ export default async function handler(req: any, res: any) {
 
     const [totPrev] = await analytics.runReport({
       property: `properties/${propertyId}`,
-      dateRanges: [{ startDate: prevStartDate, endDate: prevEndDate }],
+      dateRanges: [{ startDate: prevStart, endDate: prevEnd }],
       metrics: [
         { name: 'totalUsers' },
         { name: 'sessions' },
@@ -67,7 +67,7 @@ export default async function handler(req: any, res: any) {
     // 2) Users trend
     const [trendRes] = await analytics.runReport({
       property: `properties/${propertyId}`,
-      dateRanges: [{ startDate, endDate }],
+      dateRanges: [{ startDate: start, endDate: end }],
       dimensions: [{ name: 'date' }],
       metrics: [{ name: 'totalUsers' }],
       orderBys: [{ dimension: { dimensionName: 'date' }, desc: false }],
@@ -81,7 +81,7 @@ export default async function handler(req: any, res: any) {
     // 3) Traffic channels
     const [channelsRes] = await analytics.runReport({
       property: `properties/${propertyId}`,
-      dateRanges: [{ startDate, endDate }],
+      dateRanges: [{ startDate: start, endDate: end }],
       dimensions: [{ name: 'sessionDefaultChannelGroup' }],
       metrics: [{ name: 'sessions' }],
       orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
@@ -97,7 +97,7 @@ export default async function handler(req: any, res: any) {
     // 4) Top pages
     const [pagesRes] = await analytics.runReport({
       property: `properties/${propertyId}`,
-      dateRanges: [{ startDate, endDate }],
+      dateRanges: [{ startDate: start, endDate: end }],
       dimensions: [{ name: 'pagePath' }],
       metrics: [{ name: 'screenPageViews' }, { name: 'totalUsers' }],
       orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
@@ -123,26 +123,13 @@ export default async function handler(req: any, res: any) {
 
 function buildPeriods(range: Range) {
   const days = range === '7d' ? 7 : range === '90d' ? 90 : 30;
-  const end = new Date();
-  end.setUTCDate(end.getUTCDate() - 1); // yesterday
-  const start = new Date(end);
-  start.setUTCDate(end.getUTCDate() - (days - 1));
-
-  const prevEnd = new Date(start);
-  prevEnd.setUTCDate(start.getUTCDate() - 1);
-  const prevStart = new Date(prevEnd);
-  prevStart.setUTCDate(prevEnd.getUTCDate() - (days - 1));
-
-  return {
-    startDate: toISO(start),
-    endDate: toISO(end),
-    prevStartDate: toISO(prevStart),
-    prevEndDate: toISO(prevEnd)
-  };
-}
-
-function toISO(d: Date) {
-  return d.toISOString().slice(0, 10);
+  // Current window: (days-1)daysAgo .. today
+  const start = `${days - 1}daysAgo`;
+  const end = 'today';
+  // Previous window: (2*days-1)daysAgo .. daysAgo
+  const prevStart = `${2 * days - 1}daysAgo`;
+  const prevEnd = `${days}daysAgo`;
+  return { start, end, prevStart, prevEnd };
 }
 
 function toNum(v?: string) {
