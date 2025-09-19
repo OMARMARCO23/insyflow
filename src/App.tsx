@@ -7,6 +7,7 @@ import { SeoInsights } from './views/SeoInsights';
 import { Settings } from './views/Settings';
 import { useWebsite } from './context/WebsiteContext';
 import { ConnectWebsite } from './components/ConnectWebsite';
+import Ga4RouteTracker from '@/components/Ga4RouteTracker';
 
 const App: React.FC = () => {
   const { website } = useWebsite();
@@ -20,6 +21,7 @@ const App: React.FC = () => {
       <Sidebar />
       <main className="flex w-full flex-col">
         <Header />
+        <Ga4RouteTracker />
         <div className="mx-auto w-full max-w-7xl flex-1">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -33,5 +35,6 @@ const App: React.FC = () => {
     </div>
   );
 };
+
 
 export default App;
