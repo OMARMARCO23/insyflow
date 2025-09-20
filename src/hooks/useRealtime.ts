@@ -8,6 +8,7 @@ export function useRealtimeActiveUsers(intervalMs = 10000) {
   useEffect(() => {
     let timer: any;
     let mounted = true;
+
     async function tick() {
       try {
         const res = await fetch(`${API_BASE}/api/ga4-rt`);
@@ -19,6 +20,7 @@ export function useRealtimeActiveUsers(intervalMs = 10000) {
         timer = setTimeout(tick, intervalMs);
       }
     }
+
     tick();
     return () => {
       mounted = false;
