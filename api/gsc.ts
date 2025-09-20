@@ -1,3 +1,11 @@
+function cors(res: any) {
+  const allowed = process.env.VERCEL_ALLOWED_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean);
+  const origin = res.req?.headers?.origin;
+  const allow = allowed?.length ? (allowed.includes(origin) ? origin : allowed[0]) : '*';
+  res.setHeader('Access-Control-Allow-Origin', allow);
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 import { google } from 'googleapis';
 
 type Range = '7d' | '30d' | '90d';
@@ -170,4 +178,5 @@ function toPath(full: string) {
   } catch {
     return full;
   }
+
 }
