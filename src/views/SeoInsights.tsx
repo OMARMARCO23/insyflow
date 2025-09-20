@@ -17,6 +17,7 @@ export const SeoInsights: React.FC = () => {
   const [queries, setQueries] = useState(TOP_QUERIES);
   const [pages, setPages] = useState(TOP_SEO_PAGES);
   const [loading, setLoading] = useState(false);
+  const [live, setLive] = useState(false); // show whether data came from API
 
   useEffect(() => {
     let cancelled = false;
@@ -24,14 +25,15 @@ export const SeoInsights: React.FC = () => {
       setLoading(true);
       try {
         const data = await fetchSeo(range);
-        if (!cancelled) {
+        if (!cancelled && data?.seoKpis) {
           setSeoKpis(data.seoKpis);
           setPerformance(data.performance);
           setQueries(data.topQueries);
           setPages(data.topPages);
+          setLive(true);
         }
       } catch {
-        // keep mock data on failure
+        if (!cancelled) setLive(false); // fallback to mock
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -82,11 +84,18 @@ export const SeoInsights: React.FC = () => {
     topPages: pages,
   };
 
+  const allZero = seoKpis.every(k => Number(k.value) === 0);
+
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
         <DateRangeSelector onChange={(r) => setRange(r as Range)} />
-        {loading && <span className="text-xs text-gray-500">Loading…</span>}
+        <div className="flex items-center gap-3">
+          {loading && <span className="text-xs text-gray-500">Loading…</span>}
+          <span className={`text-xs rounded px-2 py-1 ${live ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}>
+            {live ? 'Live data' : 'Mock data'}
+          </span>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -99,10 +108,17 @@ export const SeoInsights: React.FC = () => {
               k.format === 'decimal' ? k.value.toFixed(1) :
               k.value
             }
-            changePct={0}
+            changePct={k.changePct ?? 0}
           />
         ))}
       </div>
+
+      {allZero && live && (
+        <div className="rounded-md border border-gray-200 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-gray-800 dark:bg-yellow-900/20 dark:text-yellow-200">
+          No Search Console data yet for this property. If it's new, data can take up to ~48 hours to appear.
+          Ensure GSC_SITE_URL matches your property exactly and that the service account is a Full user.
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <ChartCard title={t('charts.searchPerformance')}>
