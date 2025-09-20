@@ -46,7 +46,48 @@ export default async function handler(req: any, res: any) {
 
     const perf = await sc.searchanalytics.query({ siteUrl, requestBody: { startDate, endDate, dimensions: ['date'], rowLimit: 1000 }});
     const performance = (perf.data.rows || []).map(r => ({ date: String(r.keys?.[0] || ''), clicks: Math.round(r.clicks || 0), impressions: Math.round(r.impressions || 0)}));
+// inside handler, after reading env vars and before queries:
+const searchType = (req.query.searchType as 'web' | 'image' | 'video' | 'news') || 'web';
+const wide = req.query.wide === '1';
 
+const r = (req.query.range as Range) || '30d';
+const { startDate, endDate, prevStartDate, prevEndDate } = buildPeriods(r);
+
+// ... when calling sc.searchanalytics.query, include searchType:
+const cur = await sc.searchanalytics.query({
+  siteUrl,
+  requestBody: { startDate, endDate, searchType }
+});
+const prev = await sc.searchanalytics.query({
+  siteUrl,
+  requestBody: { startDate: prevStartDate, endDate: prevEndDate, searchType }
+});
+
+// Performance:
+const perf = await sc.searchanalytics.query({
+  siteUrl,
+  requestBody: {
+    startDate, endDate,
+    dimensions: ['date'],
+    rowLimit: 1000,
+    searchType
+  }
+});
+
+// If you want, add a “wide” fallback (16 months) when performance is empty:
+if ((perf.data.rows || []).length === 0 && wide) {
+  const start16 = iso(monthsAgo(16));
+  const perfWide = await sc.searchanalytics.query({
+    siteUrl,
+    requestBody: { startDate: start16, endDate: iso(new Date()), dimensions: ['date'], rowLimit: 1000, searchType }
+  });
+  // replace performance with wide data for debug visibility
+  performance = (perfWide.data.rows || []).map(r => ({
+    date: String(r.keys?.[0] || ''),
+    clicks: Math.round(r.clicks || 0),
+    impressions: Math.round(r.impressions || 0)
+  }));
+}
     const queriesRes = await sc.searchanalytics.query({ siteUrl, requestBody: { startDate, endDate, dimensions: ['query'], rowLimit: 10 }});
     const topQueries = (queriesRes.data.rows || []).map(r => ({ query: String(r.keys?.[0] || ''), clicks: Math.round(r.clicks || 0), impressions: Math.round(r.impressions || 0), ctr: (r.ctr || 0) * 100, position: r.position || 0 }));
 
@@ -75,3 +116,4 @@ const kpi = (key: string, labelKey: string, value: number, changePct: number, fo
 const pct = (cur: number, prev: number) => prev ? ((cur - prev) / prev) * 100 : 0;
 const pctReverse = (cur: number, prev: number) => prev ? ((prev - cur) / prev) * 100 : 0;
 const toPath = (full: string) => { try { return new URL(full).pathname || '/'; } catch { return full; } };
+
