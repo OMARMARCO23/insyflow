@@ -1,38 +1,28 @@
-function cors(res: any) {
-  const allowed = process.env.VERCEL_ALLOWED_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean);
-  const origin = res.req?.headers?.origin;
-  const allow = allowed?.length ? (allowed.includes(origin) ? origin : allowed[0]) : '*';
-  res.setHeader('Access-Control-Allow-Origin', allow);
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
 import { google } from 'googleapis';
 
 type Range = '7d' | '30d' | '90d';
 
-export default async function handler(req: any, res: any) {
-  try {
-    if (req.method !== 'GET') {
-      res.status(405).json({ error: 'Method not allowed' });
-      return;
-    }
+function cors(res: any) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 
+export default async function handler(req: any, res: any) {
+  cors(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+
+  try {
     const siteUrl = process.env.GSC_SITE_URL;
     const keyJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
-
-    if (!siteUrl || !keyJson) {
-      res.status(500).json({ error: 'Missing GSC_SITE_URL or GOOGLE_SERVICE_ACCOUNT_KEY' });
-      return;
-    }
+    if (!siteUrl || !keyJson) return res.status(500).json({ error: 'Missing GSC_SITE_URL or GOOGLE_SERVICE_ACCOUNT_KEY' });
 
     const sa = JSON.parse(keyJson);
-    const privateKey = String(sa.private_key || '').replace(/\\n/g, '\n');
-    const clientEmail = sa.client_email as string;
-
     const auth = new google.auth.JWT(
-      clientEmail,
+      sa.client_email,
       undefined,
-      privateKey,
+      String(sa.private_key || '').replace(/\\n/g, '\n'),
       ['https://www.googleapis.com/auth/webmasters.readonly']
     );
     const sc = google.searchconsole({ version: 'v1', auth });
@@ -40,30 +30,12 @@ export default async function handler(req: any, res: any) {
     const range = (req.query.range as Range) || '30d';
     const { startDate, endDate, prevStartDate, prevEndDate } = buildPeriods(range);
 
-    // KPIs current
-    const cur = await sc.searchanalytics.query({
-      siteUrl,
-      requestBody: { startDate, endDate }
-    });
-    // KPIs previous
-    const prev = await sc.searchanalytics.query({
-      siteUrl,
-      requestBody: { startDate: prevStartDate, endDate: prevEndDate }
-    });
+    const cur = await sc.searchanalytics.query({ siteUrl, requestBody: { startDate, endDate }});
+    const prev = await sc.searchanalytics.query({ siteUrl, requestBody: { startDate: prevStartDate, endDate: prevEndDate }});
 
-    const curRow = cur.data.rows?.[0];
-    const prevRow = prev.data.rows?.[0];
-
-    const clicks = Math.round(curRow?.clicks || 0);
-    const impressions = Math.round(curRow?.impressions || 0);
-    // API returns ctr as 0..1
-    const ctr = ((curRow?.ctr || 0) * 100);
-    const position = curRow?.position || 0;
-
-    const clicksPrev = Math.round(prevRow?.clicks || 0);
-    const impressionsPrev = Math.round(prevRow?.impressions || 0);
-    const ctrPrev = ((prevRow?.ctr || 0) * 100);
-    const posPrev = prevRow?.position || 0;
+    const c = cur.data.rows?.[0]; const p = prev.data.rows?.[0];
+    const clicks = Math.round(c?.clicks || 0), impressions = Math.round(c?.impressions || 0), ctr = (c?.ctr || 0) * 100, position = c?.position || 0;
+    const clicksPrev = Math.round(p?.clicks || 0), impressionsPrev = Math.round(p?.impressions || 0), ctrPrev = (p?.ctr || 0) * 100, posPrev = p?.position || 0;
 
     const seoKpis = [
       kpi('clicks', 'kpi.totalClicks', clicks, pct(clicks, clicksPrev), 'number'),
@@ -72,59 +44,17 @@ export default async function handler(req: any, res: any) {
       kpi('position', 'kpi.avgPosition', position, pctReverse(position, posPrev), 'decimal'),
     ];
 
-    // Performance over time (date dimension)
-    const perf = await sc.searchanalytics.query({
-      siteUrl,
-      requestBody: {
-        startDate, endDate,
-        dimensions: ['date'],
-        rowLimit: 1000
-      }
-    });
-    const performance = (perf.data.rows || []).map(r => ({
-      date: (r.keys?.[0] as string) || '',
-      clicks: Math.round(r.clicks || 0),
-      impressions: Math.round(r.impressions || 0)
-    }));
+    const perf = await sc.searchanalytics.query({ siteUrl, requestBody: { startDate, endDate, dimensions: ['date'], rowLimit: 1000 }});
+    const performance = (perf.data.rows || []).map(r => ({ date: String(r.keys?.[0] || ''), clicks: Math.round(r.clicks || 0), impressions: Math.round(r.impressions || 0)}));
 
-    // Top queries
-    const queriesRes = await sc.searchanalytics.query({
-      siteUrl,
-      requestBody: {
-        startDate, endDate,
-        dimensions: ['query'],
-        rowLimit: 10
-      }
-    });
-    const topQueries = (queriesRes.data.rows || []).map(r => ({
-      query: String(r.keys?.[0] || ''),
-      clicks: Math.round(r.clicks || 0),
-      impressions: Math.round(r.impressions || 0),
-      ctr: ((r.ctr || 0) * 100),
-      position: r.position || 0
-    }));
+    const queriesRes = await sc.searchanalytics.query({ siteUrl, requestBody: { startDate, endDate, dimensions: ['query'], rowLimit: 10 }});
+    const topQueries = (queriesRes.data.rows || []).map(r => ({ query: String(r.keys?.[0] || ''), clicks: Math.round(r.clicks || 0), impressions: Math.round(r.impressions || 0), ctr: (r.ctr || 0) * 100, position: r.position || 0 }));
 
-    // Top pages
-    const pagesRes = await sc.searchanalytics.query({
-      siteUrl,
-      requestBody: {
-        startDate, endDate,
-        dimensions: ['page'],
-        rowLimit: 10
-      }
-    });
-    const topPages = (pagesRes.data.rows || []).map(r => {
-      const full = String(r.keys?.[0] || '');
-      const path = toPath(full);
-      return {
-        path,
-        clicks: Math.round(r.clicks || 0),
-        impressions: Math.round(r.impressions || 0),
-        ctr: ((r.ctr || 0) * 100),
-        position: r.position || 0
-      };
-    });
+    const pagesRes = await sc.searchanalytics.query({ siteUrl, requestBody: { startDate, endDate, dimensions: ['page'], rowLimit: 10 }});
+    const topPages = (pagesRes.data.rows || []).map(r => ({ path: toPath(String(r.keys?.[0] || '')), clicks: Math.round(r.clicks || 0), impressions: Math.round(r.impressions || 0), ctr: (r.ctr || 0) * 100, position: r.position || 0 }));
 
+    // Cache for 5 minutes at the Edge, allow stale while revalidating
+    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=300');
     res.status(200).json({ seoKpis, performance, topQueries, topPages });
   } catch (err: any) {
     console.error('GSC error:', err);
@@ -134,49 +64,14 @@ export default async function handler(req: any, res: any) {
 
 function buildPeriods(range: Range) {
   const days = range === '7d' ? 7 : range === '90d' ? 90 : 30;
-  const end = new Date();
-  end.setUTCDate(end.getUTCDate() - 2); // GSC data lags ~2 days
-  const start = new Date(end);
-  start.setUTCDate(end.getUTCDate() - (days - 1));
-
-  const prevEnd = new Date(start);
-  prevEnd.setUTCDate(start.getUTCDate() - 1);
-  const prevStart = new Date(prevEnd);
-  prevStart.setUTCDate(prevEnd.getUTCDate() - (days - 1));
-
-  return {
-    startDate: toISO(start),
-    endDate: toISO(end),
-    prevStartDate: toISO(prevStart),
-    prevEndDate: toISO(prevEnd),
-  };
+  const end = new Date(); end.setUTCDate(end.getUTCDate() - 2);
+  const start = new Date(end); start.setUTCDate(end.getUTCDate() - (days - 1));
+  const prevEnd = new Date(start); prevEnd.setUTCDate(start.getUTCDate() - 1);
+  const prevStart = new Date(prevEnd); prevStart.setUTCDate(prevEnd.getUTCDate() - (days - 1));
+  return { startDate: iso(start), endDate: iso(end), prevStartDate: iso(prevStart), prevEndDate: iso(prevEnd) };
 }
-
-function toISO(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
-
-function kpi(key: string, labelKey: string, value: number, changePct: number, format: 'number' | 'percent' | 'decimal') {
-  return { key, labelKey, value, changePct, format };
-}
-
-function pct(cur: number, prev: number) {
-  if (!prev) return 0;
-  return ((cur - prev) / prev) * 100;
-}
-
-// Lower position is better, so invert positive/negative
-function pctReverse(cur: number, prev: number) {
-  if (!prev) return 0;
-  return ((prev - cur) / prev) * 100;
-}
-
-function toPath(full: string) {
-  try {
-    const u = new URL(full);
-    return u.pathname || '/';
-  } catch {
-    return full;
-  }
-
-}
+const iso = (d: Date) => d.toISOString().slice(0, 10);
+const kpi = (key: string, labelKey: string, value: number, changePct: number, format: 'number' | 'percent' | 'decimal') => ({ key, labelKey, value, changePct, format });
+const pct = (cur: number, prev: number) => prev ? ((cur - prev) / prev) * 100 : 0;
+const pctReverse = (cur: number, prev: number) => prev ? ((prev - cur) / prev) * 100 : 0;
+const toPath = (full: string) => { try { return new URL(full).pathname || '/'; } catch { return full; } };
