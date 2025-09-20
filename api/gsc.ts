@@ -117,3 +117,8 @@ const pct = (cur: number, prev: number) => prev ? ((cur - prev) / prev) * 100 : 
 const pctReverse = (cur: number, prev: number) => prev ? ((prev - cur) / prev) * 100 : 0;
 const toPath = (full: string) => { try { return new URL(full).pathname || '/'; } catch { return full; } };
 
+function monthsAgo(m: number) {
+  const d = new Date();
+  d.setMonth(d.getMonth() - m);
+  return d;
+}
